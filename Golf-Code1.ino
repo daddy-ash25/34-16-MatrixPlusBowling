@@ -212,7 +212,9 @@ int detected = checkBalls();
   if ((detected != -1 || result[1] == 1)&&gameIsOn){
     Serial.println("here i am before calling gameModeA via loop");
     Serial.println(detected);
-    gameModeA(detected, result[1]);
+    
+    if(UIstate == 3) gameModeA(detected, result[1]);
+    if(UIstate == 4) gameModeB(detected, result[1]);
   }
 
 
@@ -704,13 +706,13 @@ void threePlayerSelectMenue(uint8_t buttonNo,bool isItLongPress){
   }
   matrix->setTextColor(matrix->Color(0, 0, 0));
   matrix->setCursor(6, 7);  // X=0, Y=6 baseline
-  matrix->print("1P");
-  matrix->setCursor(22, 7);  // X=0, Y=6 baseline
   matrix->print("3P");
-  matrix->setCursor(6, 15);  // X=0, Y=6 baseline
+  matrix->setCursor(22, 7);  // X=0, Y=6 baseline
   matrix->print("6P");
-  matrix->setCursor(22, 15);  // X=0, Y=6 baseline
+  matrix->setCursor(6, 15);  // X=0, Y=6 baseline
   matrix->print("9P");
+  matrix->setCursor(22, 15);  // X=0, Y=6 baseline
+  matrix->print("1P");
   matrix->show();
 
   delay(50);
@@ -724,6 +726,14 @@ void threePlayerSelectMenue(uint8_t buttonNo,bool isItLongPress){
     gameIsOn = false;
     menueSelectionLadder(-1, 0);
     return;
+  }
+  else if(buttonNo == 0){
+    PlayerCount = 3 + (selectState*3);
+    selectState = 0;
+    UIstate = 4;
+    firstCall = true;
+    gameIsOn = true;
+    gameModeB(-1 , 0);
   }
 }
 
@@ -763,7 +773,7 @@ void gameModeA(int detected, bool isItLongPress){
     for(uint8_t i = 0; i < 12 ; i++) ChancesLeft[i] = ChancesPerPlayer;
     teamAScore = 0;
     teamBScore = 0;
-    drawScoreboard(teamAScore, teamBScore);
+    drawScoreboardA(teamAScore, teamBScore);
   }
   else if(isItLongPress){
     UIstate = 0;
@@ -782,9 +792,15 @@ void gameModeA(int detected, bool isItLongPress){
       }
     }
     
-    if (detected % 2 == 0) ScoredAnimation(teamAScore , teamBScore , 3+(5*detected), 1, 237, 28, 36);
-    else ScoredAnimation (teamAScore , teamBScore , 3+(5*detected), 1, 63, 72, 204);
-    drawScoreboard(teamAScore, teamBScore);
+    if(detected<3){
+      if (detected % 2 == 0) ScoredAnimationA(teamAScore , teamBScore , 3+(5*detected), 1, 237, 28, 36);
+      else ScoredAnimationA(teamAScore , teamBScore , 3+(5*detected), 1, 63, 72, 204);
+    }
+    else{
+      if (detected % 2 == 0) ScoredAnimationA(teamAScore , teamBScore , 5+(5*detected), 1, 237, 28, 36);
+      else ScoredAnimationA(teamAScore , teamBScore , 5+(5*detected), 1, 63, 72, 204);
+    }
+    drawScoreboardA(teamAScore, teamBScore);
     // matrix->show();
     if(ChancesLeft[PlayerCount-1]==0){
       if(teamAScore>teamBScore){
@@ -823,6 +839,117 @@ void gameModeA(int detected, bool isItLongPress){
 }
 
 
+void gameModeB(int detected, bool isItLongPress){
+  FastLED.clear();
+  static uint8_t teamAScore = 0;
+  static uint8_t teamBScore = 0;
+  static uint8_t teamCScore = 0;
+  // Serial.println("here i am at the gameModeA");
+  // Serial.println(detected);
+  // Serial.println(PlayerCount);
+
+  if((detected ==-1)&&!isItLongPress){
+    for(uint8_t i = 0; i < 12 ; i++) ChancesLeft[i] = ChancesPerPlayer;
+    teamAScore = 0;
+    teamBScore = 0;
+    teamCScore = 0;
+    drawScoreboardB(teamAScore, teamBScore, teamCScore);
+  }
+  else if(isItLongPress){
+    UIstate = 0;
+    selectState = 0;
+    gameIsOn = false;
+    menueSelectionLadder(-1, 0);
+    return;
+  }
+  else{
+    if(detected == 0 || detected == 3) teamBScore += 1;
+    else if(detected == 1 || detected == 4) teamAScore += 1;
+    else teamCScore += 1;
+    for (uint8_t i = 0 ; i < PlayerCount ; i++ ){
+      if(ChancesLeft[i] != 0){
+        ChancesLeft[i] = ChancesLeft[i]-1;
+        break;
+      }
+    }
+    
+
+    if (detected == 0) ScoredAnimationB(teamAScore , teamBScore , teamCScore , 3+(5*detected), 1, 237, 28, 36);
+    else if (detected == 1) ScoredAnimationB(teamAScore , teamBScore , teamCScore , 3+(5*detected), 1, 63, 72, 204);
+    else if (detected == 2) ScoredAnimationB(teamAScore , teamBScore , teamCScore , 3+(5*detected), 1, 255, 242, 50);
+    else if (detected == 3) ScoredAnimationB(teamAScore , teamBScore , teamCScore , 3+(5*detected), 1, 237, 28, 36);
+    else if (detected == 4) ScoredAnimationB(teamAScore , teamBScore , teamCScore , 3+(5*detected), 1, 63, 72, 204);
+    else ScoredAnimationB (teamAScore , teamBScore , teamCScore , 3+(5*detected), 1, 255, 242, 50);
+    drawScoreboardB(teamAScore, teamBScore, teamCScore);
+    // matrix->show();
+
+    if(ChancesLeft[PlayerCount-1]==0){
+      if((teamAScore>teamBScore)&&(teamAScore>teamCScore)){
+        matrix->fillRect(0,0,34,16,matrix->Color(237, 28, 36));
+        matrix->setTextColor(matrix->Color(0, 0, 0));
+        matrix->setCursor(4, 8);
+        matrix->print("Winner!!");
+        matrix->setCursor(15, 15);
+        matrix->print(teamAScore);
+      }
+      else if((teamAScore<teamBScore)&&(teamCScore<teamBScore)){
+        matrix->fillRect(0,0,34,16,matrix->Color(63, 72, 204));
+        matrix->setTextColor(matrix->Color(0, 0, 0));
+        matrix->setCursor(4, 8);
+        matrix->print("Winner!!");
+        matrix->setCursor(15, 15);
+        matrix->print(teamBScore);
+      }
+      else if((teamAScore<teamCScore)&&(teamBScore<teamCScore)){
+        matrix->fillRect(0,0,34,16,matrix->Color(255, 242, 50));
+        matrix->setTextColor(matrix->Color(0, 0, 0));
+        matrix->setCursor(4, 8);
+        matrix->print("Winner!!");
+        matrix->setCursor(15, 15);
+        matrix->print(teamCScore);
+      }
+      else if((teamAScore==teamCScore)&&(teamBScore<teamCScore)){
+        matrix->fillRect(0,0,17,16,matrix->Color(237, 28, 36));
+        matrix->fillRect(16,0,17,16,matrix->Color(255, 242, 50));
+        matrix->setTextColor(matrix->Color(0, 0, 0));
+        matrix->setCursor(9, 11);
+        matrix->print("TIE !!");
+      }
+      else if((teamAScore==teamBScore)&&(teamBScore>teamCScore)){
+        matrix->fillRect(0,0,17,16,matrix->Color(237, 28, 36));
+        matrix->fillRect(16,0,17,16,matrix->Color(63, 72, 204));
+        matrix->setTextColor(matrix->Color(0, 0, 0));
+        matrix->setCursor(9, 11);
+        matrix->print("TIE !!");
+      }
+      else if((teamBScore==teamBScore)&&(teamBScore>teamAScore)){
+        matrix->fillRect(0,0,17,16,matrix->Color(255, 242, 50));
+        matrix->fillRect(16,0,17,16,matrix->Color(63, 72, 204));
+        matrix->setTextColor(matrix->Color(0, 0, 0));
+        matrix->setCursor(9, 11);
+        matrix->print("TIE !!");
+      }
+      else{
+        matrix->fillRect(0,0,34,16,matrix->Color(45, 210, 75));
+        matrix->setTextColor(matrix->Color(0, 0, 0));
+        matrix->setCursor(9, 11);
+        matrix->print("TIE !!");
+      }
+      UIstate = 0;
+      gameIsOn = false;
+      selectState = 0;
+      FastLED.show();
+      delay(7000);
+      menueSelectionLadder(-1,0);
+      return;
+    }
+  }
+
+  FastLED.show();
+  delay(200);
+}
+
+
 
 
 void fillOutsideCircle(int centerX, int centerY, int radius, uint16_t color) {
@@ -844,7 +971,7 @@ void fillOutsideCircle(int centerX, int centerY, int radius, uint16_t color) {
 }
 
 
-void ScoredAnimation(uint8_t teamAScore, uint8_t teamBScore, uint8_t cx, uint8_t cy, uint8_t rCol, uint8_t gCol, uint8_t bCol) {
+void ScoredAnimationA(uint8_t teamAScore, uint8_t teamBScore, uint8_t cx, uint8_t cy, uint8_t rCol, uint8_t gCol, uint8_t bCol) {
     uint16_t color = matrix->Color(rCol, gCol, bCol);
 
     // --- First expanding circle animation ---
@@ -861,7 +988,47 @@ void ScoredAnimation(uint8_t teamAScore, uint8_t teamBScore, uint8_t cx, uint8_t
     delay(50);
 
     // --- Draw scoreboard ONCE and store it ---
-    drawScoreboard(teamAScore, teamBScore);
+    drawScoreboardA(teamAScore, teamBScore);
+
+    // Save scoreboard into buffer
+    memcpy(scoreboardBuffer, leds, sizeof(leds));
+
+    // --- Expanding "outside circle" animation ---
+    for (uint8_t r = 1; r <= 17; r++) {
+        // Restore scoreboard from buffer
+        memcpy(leds, scoreboardBuffer, sizeof(leds));
+
+        // Draw animated part on top
+        fillOutsideCircle(cx, cy, (r * 2), color);
+
+        matrix->show();
+
+        if (r < 4) delay(40);
+        else if (r < 10) delay(22);
+        else if (r < 15) delay(10);
+        else delay(5);
+    }
+    delay(50);
+}
+
+void ScoredAnimationB(uint8_t teamAScore, uint8_t teamBScore, uint8_t teamCScore, uint8_t cx, uint8_t cy, uint8_t rCol, uint8_t gCol, uint8_t bCol) {
+    uint16_t color = matrix->Color(rCol, gCol, bCol);
+
+    // --- First expanding circle animation ---
+    for (uint8_t r = 1; r <= 17; r++) {
+        matrix->fillCircle(cx, cy, (r * 2), color);
+        matrix->show();
+
+        if (r < 4) delay(40);
+        else if (r < 10) delay(22);
+        else if (r < 15) delay(10);
+        else delay(5);
+    }
+
+    delay(50);
+
+    // --- Draw scoreboard ONCE and store it ---
+    drawScoreboardB(teamAScore, teamBScore, teamCScore);
 
     // Save scoreboard into buffer
     memcpy(scoreboardBuffer, leds, sizeof(leds));
@@ -887,28 +1054,28 @@ void ScoredAnimation(uint8_t teamAScore, uint8_t teamBScore, uint8_t cx, uint8_t
 
 
 
-void drawScoreboard(uint8_t teamAScore, uint8_t teamBScore) {
-    // Draw the base scoreboard image
-    drawImage(GameModeAScoreboard, 34, 16, 0, 0);
-    delay(50);
+void drawScoreboardA(uint8_t teamAScore, uint8_t teamBScore) {
+  // Draw the base scoreboard image
+  drawImage(GameModeAScoreboard, 34, 16, 0, 0);
+  delay(50);
 
-    // Team A score (blue)
-    matrix->setTextColor(matrix->Color(63, 72, 204));
-    matrix->setCursor(10, 11);
-    matrix->print(teamAScore);
+  // Team A score (blue)
+  matrix->setTextColor(matrix->Color(63, 72, 204));
+  matrix->setCursor(10, 11);
+  matrix->print(teamAScore);
 
-    // Team B score (red)
-    matrix->setTextColor(matrix->Color(237, 28, 36));
-    matrix->setCursor(21, 11);
-    matrix->print(teamBScore);
+  // Team B score (red)
+  matrix->setTextColor(matrix->Color(237, 28, 36));
+  matrix->setCursor(21, 11);
+  matrix->print(teamBScore);
 
-    // Small colored squares (decorations)
-    matrix->fillRect(3, 1, 2, 2, matrix->Color(237, 28, 36)); // red
-    matrix->fillRect(8, 1, 2, 2, matrix->Color(63, 72, 204)); // blue
-    matrix->fillRect(13, 1, 2, 2, matrix->Color(237, 28, 36)); // red
-    matrix->fillRect(19, 1, 2, 2, matrix->Color(63, 72, 204)); // blue
-    matrix->fillRect(24, 1, 2, 2, matrix->Color(237, 28, 36)); // red
-    matrix->fillRect(29, 1, 2, 2, matrix->Color(63, 72, 204)); // blue
+  // Small colored squares (decorations)
+  matrix->fillRect(3, 1, 2, 2, matrix->Color(237, 28, 36)); // red
+  matrix->fillRect(8, 1, 2, 2, matrix->Color(63, 72, 204)); // blue
+  matrix->fillRect(13, 1, 2, 2, matrix->Color(237, 28, 36)); // red
+  matrix->fillRect(19, 1, 2, 2, matrix->Color(63, 72, 204)); // blue
+  matrix->fillRect(24, 1, 2, 2, matrix->Color(237, 28, 36)); // red
+  matrix->fillRect(29, 1, 2, 2, matrix->Color(63, 72, 204)); // blue
 
 
     //Drawing the chances left bars
@@ -917,11 +1084,11 @@ void drawScoreboard(uint8_t teamAScore, uint8_t teamBScore) {
       if(ChancesLeft[i-1] != 0){
         if(i%2 != 0){
           matrix->drawLine(0, (3 + i), ChancesLeft[i-1]-1, (3 + i), matrix->Color(63, 72, 204));
-          matrix->drawLine(0, HEIGHT-1, WIDTH, HEIGHT-1, matrix->Color(63, 72, 204));
+          // matrix->drawLine(0, HEIGHT-1, WIDTH, HEIGHT-1, matrix->Color(63, 72, 204));
         }
         else{
           matrix->drawLine(34-ChancesLeft[i-1], (2 + i), 33, (2 + i), matrix->Color(237, 28, 36));
-          matrix->drawLine(0, HEIGHT-1, WIDTH, HEIGHT-1, matrix->Color(237, 28, 36));
+          // matrix->drawLine(0, HEIGHT-1, WIDTH, HEIGHT-1, matrix->Color(237, 28, 36));
         }
       }
     }
@@ -939,6 +1106,73 @@ void drawScoreboard(uint8_t teamAScore, uint8_t teamBScore) {
         }
       }
     }
+}
+
+void drawScoreboardB(uint8_t teamAScore, uint8_t teamBScore, uint8_t teamCScore){
+  drawImage(GameModeBScoreboard, 34, 16, 0, 0);
+  delay(50);
+  uint8_t baseX = (WIDTH-(3*PlayerCount))/2;
+
+  // Team A score (blue)
+  matrix->setTextColor(matrix->Color(63, 72, 204));
+  matrix->setCursor(7, 8);
+  matrix->print(teamAScore);
+
+  // Team B score (red)
+  matrix->setTextColor(matrix->Color(237, 28, 36));
+  matrix->setCursor(16, 8);
+  matrix->print(teamBScore);
+
+  // Team C score (yellow)
+  matrix->setTextColor(matrix->Color(255,242, 50));
+  matrix->setCursor(25, 8);
+  matrix->print(teamCScore);
+
+
+  // Small colored squares (decorations)
+  matrix->fillRect(3, 0, 2, 1, matrix->Color(237, 28, 36)); // red
+  matrix->fillRect(10, 0, 2, 1, matrix->Color(63, 72, 204)); // blue
+  matrix->fillRect(14, 0, 2, 1, matrix->Color(255, 242, 50)); // red
+  matrix->fillRect(18, 0, 2, 1, matrix->Color(237, 28, 36)); // blue
+  matrix->fillRect(22, 0, 2, 1, matrix->Color(63, 72, 204)); // red
+  matrix->fillRect(29, 0, 2, 1, matrix->Color(255, 242, 50)); // blue
+
+
+  for (uint8_t i = 1 ; i <= PlayerCount ; i++ ){
+    if(ChancesLeft[i-1] != 0){
+      if(i%3==0){
+        matrix->drawLine(baseX+1 + (3*(i-1)), HEIGHT-ChancesLeft[i-1], baseX+1 + (3*(i-1)), HEIGHT+1, matrix->Color(63, 72, 204));
+        matrix->drawLine(baseX+1 + 1 + (3*(i-1)), HEIGHT-ChancesLeft[i-1], baseX+1 + 1 + (3*(i-1)), HEIGHT+1, matrix->Color(63, 72, 204));
+      }
+      else if(i%3==1){
+        matrix->drawLine(baseX+1 + (3*(i-1)), HEIGHT-ChancesLeft[i-1], baseX+1 + (3*(i-1)), HEIGHT+1, matrix->Color(237, 28, 36));
+        matrix->drawLine(baseX+1 + 1 + (3*(i-1)), HEIGHT-ChancesLeft[i-1], baseX+1 + 1 + (3*(i-1)), HEIGHT+1, matrix->Color(237, 28, 36));
+      }
+      else{
+        matrix->drawLine(baseX+1 + (3*(i-1)), HEIGHT-ChancesLeft[i-1], baseX+1 + (3*(i-1)), HEIGHT+1, matrix->Color(255, 242, 50));
+        matrix->drawLine(baseX+1 + 1 + (3*(i-1)), HEIGHT-ChancesLeft[i-1], baseX+1 + 1 + (3*(i-1)), HEIGHT+1, matrix->Color(255, 242, 50));
+      }
+    }
+  }
+  for (uint8_t i = 1 ; i <= PlayerCount ; i++ ){
+    if(ChancesLeft[i-1] != 0){
+      if(i%3==0){
+        matrix->drawLine(0, 0, 0, HEIGHT-1, matrix->Color(63, 72, 204));
+        matrix->drawLine(WIDTH-1, 0, WIDTH-1, HEIGHT-1, matrix->Color(63, 72, 204));
+        break;
+      }
+      else if(i%3==1){
+        matrix->drawLine(0, 0, 0, HEIGHT-1, matrix->Color(237, 28, 36));
+        matrix->drawLine(WIDTH-1, 0, WIDTH-1, HEIGHT-1, matrix->Color(237, 28, 36));
+        break;
+      }
+      else{
+        matrix->drawLine(0, 0, 0, HEIGHT-1, matrix->Color(255, 242, 50));
+        matrix->drawLine(WIDTH-1, 0, WIDTH-1, HEIGHT-1, matrix->Color(255, 242, 50));
+        break;
+      }
+    }
+  }
 }
 
 
