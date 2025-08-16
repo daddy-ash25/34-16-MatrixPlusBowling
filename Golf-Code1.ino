@@ -11,6 +11,10 @@
 #define NUM_LEDS    (WIDTH * HEIGHT)
 // --- Calibration settings ---
 #define GAMMA_VAL  2.6f     // Gamma correction factor
+#define LASER_PIN 42   // GPIO42
+
+#define SEVEN_MIN  (7 * 10000)   // 3 minutes in seconds
+#define FIVE_MIN   (5 * 10000)   // 5 minutes in seconds
 
 
 // int LDR_PINS[NUM_SENSORS] = {14, 13, 12, 11, 10, 9}; // Your pins
@@ -53,6 +57,7 @@ void threePlayerSelectMenue(uint8_t buttonNo,bool isItLongPress);
 void gameModeA(int detected, bool isItLongPress);
 int checkBalls();
 
+
 uint8_t gammaCorrect(uint8_t value);
 void drawImage(const uint32_t* imageData, uint8_t imgWidth, uint8_t imgHeight, uint8_t startX, uint8_t startY);
 uint16_t XY(uint8_t x, uint8_t y);
@@ -71,12 +76,13 @@ uint8_t ChancesPerPlayer = 5;
 uint8_t CurrentPlayingTeam = 0;
 bool gameIsOn = false;
 uint8_t PlayerCount = 0;
+bool inStartPage = false;
 
 
 
 
 //ball detection logics
-int threshold = 800;  // Adjust for your laser brightness
+int threshold = 900;  // Adjust for your laser brightness
 bool laserBlocked[NUM_SENSORS] = {false}; // State for each sensor
 unsigned long lastDetectionTime[NUM_SENSORS] = {0};
 unsigned long debounceTime = 500; // ms
@@ -85,6 +91,15 @@ unsigned long debounceTime = 500; // ms
 //Global UI states are defined by these variables
 int UIstate = 0;
 int selectState = 0;
+
+
+
+
+unsigned long lastActionTime = 0;   // Stores when the last action happened
+unsigned long currentTime = 0;      // For holding the current millis()
+
+
+uint8_t brightness = 120;
 
 
 
@@ -172,33 +187,65 @@ void setup() {
     Serial.println(LDR_PINS[i]);
   }
 
-  FastLED.setBrightness(100); // adjust as needed
+  FastLED.setBrightness(brightness); // adjust as needed
   FastLED.addLeds<WS2812B, DATA_PIN, GRB>(leds, NUM_LEDS);
   FastLED.clear();
 
   for (int i = 0; i < numButtons; i++) {
     pinMode(buttonPins[i], INPUT); // external pull-down resistors
   }
+  pinMode(LASER_PIN, OUTPUT);  // Set GPIO42 as output
 
   // Set the wake-up source to the button (HIGH = pressed)
   esp_sleep_enable_ext0_wakeup(GPIO_NUM_21, 1);
+  delay(200);
+  digitalWrite(LASER_PIN, HIGH);
 }
 
 
 
 
 void loop() {
-if (firstLoop) {
-  firstLoop = false;
-  sleepMode();
 
-  UIstate = 0;
-  selectState = 0;
-  menueSelectionLadder(-1,0);
-}
+  currentTime = millis();
+  int* result = checkButtonPress();
+  int sensorValues[NUM_SENSORS];
 
-int* result = checkButtonPress();
-int detected = checkBalls();
+
+  // Step 1: Get all readings
+  readSensors(sensorValues);
+
+  // Step 2: Pass readings to detection function
+  int detected = detectBall(sensorValues);
+
+  if (((currentTime-lastActionTime) > FIVE_MIN)||firstLoop) {
+    Serial.println("here at the start page");
+    inStartPage = true;
+    firstLoop = false;
+    PlayerCount = 0;
+    gameIsOn = false;
+    UIstate = 0;
+    selectState = 0;
+    FastLED.clear();
+    drawImage(SleepModeBackground, 34, 16, 0, 0); // draw at (4, 2)
+
+    // Filled rounded rectangle
+    matrix->fillRoundRect(1, 0, 22, 7, 2, matrix->Color(255, 180, 70));
+
+    matrix->setCursor(2, 6);  // X=0, Y=6 baseline
+    // matrix->setTextColor(matrix->Color(255, 50, 230));
+    matrix->setTextColor(matrix->Color(0, 0, 0));
+    matrix->print("START");
+    FastLED.show();
+    delay(50);
+  }
+
+  if ((currentTime-lastActionTime) > SEVEN_MIN){
+    Serial.println("here at the sleep page");
+    sleepMode();
+    lastActionTime = millis();
+  }
+
 
 // int* result = checkButtonPress();
   
@@ -215,6 +262,25 @@ int detected = checkBalls();
     
     if(UIstate == 3) gameModeA(detected, result[1]);
     if(UIstate == 4) gameModeB(detected, result[1]);
+
+    //Debug: Print all readings
+    Serial.print("LDR readings: ");
+    for (int i = 0; i < NUM_SENSORS; i++) {
+      Serial.print(sensorValues[i]);
+      Serial.print(" ");
+    }
+    Serial.println();
+    
+    lastActionTime = currentTime;
+  }
+
+  
+  if(result[0] == 4 || result[0] == 2){
+    if(result[0] == 2) brightness += 10;
+    else brightness -=10;
+    brightness = constrain(brightness, 80, 230);
+    FastLED.setBrightness(brightness); // adjust as needed
+    delay(50);
   }
 
 
@@ -289,7 +355,7 @@ void teamSelectMenue(uint8_t buttonNo,bool isItLongPress){
   matrix->Color(16, 122, 176) // Color (R,G,B)
   );
 
-  if(firstCall){
+  if(firstCall||inStartPage){
     Serial.println("team select menue first select");
     // Filled rounded rectangle
     matrix->fillRoundRect(
@@ -321,6 +387,7 @@ void teamSelectMenue(uint8_t buttonNo,bool isItLongPress){
     matrix->show();
 
     firstCall = false;
+    inStartPage = false;
   }
   else{
     Serial.println("team select menue not first call");
@@ -409,6 +476,7 @@ void teamSelectMenue(uint8_t buttonNo,bool isItLongPress){
     }
   }
   Serial.println(" ");
+  Serial.println("at the end of team select");
   delay(100);
 }
 
@@ -418,6 +486,7 @@ void menueSelectionLadder(uint8_t buttonNo,bool isItLongPress){
   else if(UIstate == 1) twoPlayerSelectMenue(buttonNo, isItLongPress);
   else if(UIstate == 2) threePlayerSelectMenue(buttonNo, isItLongPress);
   // else if(UIstate == 3) gameModeA(buttonNo);
+  lastActionTime = currentTime;
   delay(50);
 }
 
@@ -484,33 +553,26 @@ void playAnimation(const uint32_t* frames[], uint8_t frameCount,
 
 
 void sleepMode(){
-  // Go to light sleep immediately
   Serial.println("Entering light sleep until button press...");
   FastLED.clear();
-  drawImage(SleepModeBackground, 34, 16, 0, 0); // draw at (4, 2)
   FastLED.show();
+  PlayerCount = 0;
+  gameIsOn = false;
+  UIstate = 0;
+  selectState = 0;
+  digitalWrite(LASER_PIN, LOW);
 
-  // Filled rounded rectangle
-  matrix->fillRoundRect(
-    1,   // X position
-    0,   // Y position
-    22,  // Width
-    7,   // Height
-    2,   // Corner radius (pixels)
-    matrix->Color(255, 180, 70) // Blue
-  );
-
-  matrix->setCursor(2, 6);  // X=0, Y=6 baseline
-  // matrix->setTextColor(matrix->Color(255, 50, 230));
-  matrix->setTextColor(matrix->Color(0, 0, 0));
-  matrix->print("START");
-  matrix->show();
 
   delay(50);
   esp_light_sleep_start();
   delay(500);
+  digitalWrite(LASER_PIN, HIGH);
   Serial.println("Exited the sleep mode...");
+  menueSelectionLadder(-1, 0);
 }
+
+
+
 
 void twoPlayerSelectMenue(uint8_t buttonNo, bool isItLongPress) {
   static bool firstCall = true;
@@ -738,13 +800,21 @@ void threePlayerSelectMenue(uint8_t buttonNo,bool isItLongPress){
 }
 
 
-// Function to check all sensors and return detected sensor index
-int checkBalls() {
+
+// Function 1: Read all sensor values
+void readSensors(int readings[]) {
+  for (int i = 0; i < NUM_SENSORS; i++) {
+    readings[i] = analogRead(LDR_PINS[i]);
+  }
+}
+
+
+// Function 2: Detect which ball (if any) based on passed readings
+int detectBall(int readings[]) {
   unsigned long now = millis();
 
   for (int i = 0; i < NUM_SENSORS; i++) {
-    int ldrValue = analogRead(LDR_PINS[i]);
-    bool isLaserCut = (ldrValue < threshold);
+    bool isLaserCut = (readings[i] < threshold);
 
     if (isLaserCut && !laserBlocked[i] && (now - lastDetectionTime[i] >= debounceTime)) {
       laserBlocked[i] = true;
@@ -885,7 +955,7 @@ void gameModeB(int detected, bool isItLongPress){
 
     if(ChancesLeft[PlayerCount-1]==0){
       if((teamAScore>teamBScore)&&(teamAScore>teamCScore)){
-        matrix->fillRect(0,0,34,16,matrix->Color(237, 28, 36));
+        matrix->fillRect(0,0,34,16,matrix->Color(63, 72, 204));   // was red, now blue
         matrix->setTextColor(matrix->Color(0, 0, 0));
         matrix->setCursor(4, 8);
         matrix->print("Winner!!");
@@ -893,7 +963,7 @@ void gameModeB(int detected, bool isItLongPress){
         matrix->print(teamAScore);
       }
       else if((teamAScore<teamBScore)&&(teamCScore<teamBScore)){
-        matrix->fillRect(0,0,34,16,matrix->Color(63, 72, 204));
+        matrix->fillRect(0,0,34,16,matrix->Color(237, 28, 36));   // was blue, now red
         matrix->setTextColor(matrix->Color(0, 0, 0));
         matrix->setCursor(4, 8);
         matrix->print("Winner!!");
@@ -909,22 +979,22 @@ void gameModeB(int detected, bool isItLongPress){
         matrix->print(teamCScore);
       }
       else if((teamAScore==teamCScore)&&(teamBScore<teamCScore)){
-        matrix->fillRect(0,0,17,16,matrix->Color(237, 28, 36));
-        matrix->fillRect(16,0,17,16,matrix->Color(255, 242, 50));
+        matrix->fillRect(0,0,17,16,matrix->Color(63, 72, 204));   // left was red → blue
+        matrix->fillRect(17,0,17,16,matrix->Color(255, 242, 50));
         matrix->setTextColor(matrix->Color(0, 0, 0));
         matrix->setCursor(9, 11);
         matrix->print("TIE !!");
       }
       else if((teamAScore==teamBScore)&&(teamBScore>teamCScore)){
-        matrix->fillRect(0,0,17,16,matrix->Color(237, 28, 36));
-        matrix->fillRect(16,0,17,16,matrix->Color(63, 72, 204));
+        matrix->fillRect(0,0,17,16,matrix->Color(63, 72, 204));   // left was red → blue
+        matrix->fillRect(17,0,17,16,matrix->Color(237, 28, 36));  // right was blue → red
         matrix->setTextColor(matrix->Color(0, 0, 0));
         matrix->setCursor(9, 11);
         matrix->print("TIE !!");
       }
       else if((teamBScore==teamBScore)&&(teamBScore>teamAScore)){
         matrix->fillRect(0,0,17,16,matrix->Color(255, 242, 50));
-        matrix->fillRect(16,0,17,16,matrix->Color(63, 72, 204));
+        matrix->fillRect(17,0,17,16,matrix->Color(237, 28, 36));  // was blue → red
         matrix->setTextColor(matrix->Color(0, 0, 0));
         matrix->setCursor(9, 11);
         matrix->print("TIE !!");
@@ -1060,14 +1130,28 @@ void drawScoreboardA(uint8_t teamAScore, uint8_t teamBScore) {
   delay(50);
 
   // Team A score (blue)
-  matrix->setTextColor(matrix->Color(63, 72, 204));
-  matrix->setCursor(10, 11);
-  matrix->print(teamAScore);
+  if(teamAScore < 10){
+    matrix->setTextColor(matrix->Color(63, 72, 204));
+    matrix->setCursor(10, 11);
+    matrix->print(teamAScore);
+  }
+  else{
+    matrix->setTextColor(matrix->Color(63, 72, 204));
+    matrix->setCursor(8, 11);
+    matrix->print(teamAScore);
+  }
 
   // Team B score (red)
-  matrix->setTextColor(matrix->Color(237, 28, 36));
-  matrix->setCursor(21, 11);
-  matrix->print(teamBScore);
+  if(teamBScore < 10){
+    matrix->setTextColor(matrix->Color(237, 28, 36));
+    matrix->setCursor(21, 11);
+    matrix->print(teamBScore);
+  }
+  else{
+    matrix->setTextColor(matrix->Color(237, 28, 36));
+    matrix->setCursor(19, 11);
+    matrix->print(teamBScore);
+  }
 
   // Small colored squares (decorations)
   matrix->fillRect(3, 1, 2, 2, matrix->Color(237, 28, 36)); // red
@@ -1113,20 +1197,46 @@ void drawScoreboardB(uint8_t teamAScore, uint8_t teamBScore, uint8_t teamCScore)
   delay(50);
   uint8_t baseX = (WIDTH-(3*PlayerCount))/2;
 
-  // Team A score (blue)
-  matrix->setTextColor(matrix->Color(63, 72, 204));
-  matrix->setCursor(7, 8);
-  matrix->print(teamAScore);
+  if(teamAScore < 10){
+    // Team A score (blue)
+    matrix->setTextColor(matrix->Color(63, 72, 204));
+    matrix->setCursor(7, 8);
+    matrix->print(teamAScore);
+  }
+  else{
+    // Team A score (blue)
+    matrix->setTextColor(matrix->Color(63, 72, 204));
+    matrix->setCursor(5, 8);
+    matrix->print(teamAScore);
+  }
 
-  // Team B score (red)
-  matrix->setTextColor(matrix->Color(237, 28, 36));
-  matrix->setCursor(16, 8);
-  matrix->print(teamBScore);
 
-  // Team C score (yellow)
-  matrix->setTextColor(matrix->Color(255,242, 50));
-  matrix->setCursor(25, 8);
-  matrix->print(teamCScore);
+  if(teamBScore<10){
+    // Team B score (red)
+    matrix->setTextColor(matrix->Color(237, 28, 36));
+    matrix->setCursor(16, 8);
+    matrix->print(teamBScore);
+  }
+  else{
+    // Team B score (red)
+    matrix->setTextColor(matrix->Color(237, 28, 36));
+    matrix->setCursor(14, 8);
+    matrix->print(teamBScore);
+  }
+
+
+  if(teamCScore<10){
+    // Team C score (yellow)
+    matrix->setTextColor(matrix->Color(255,242, 50));
+    matrix->setCursor(25, 8);
+    matrix->print(teamCScore);
+  }
+  else{
+    // Team C score (yellow)
+    matrix->setTextColor(matrix->Color(255,242, 50));
+    matrix->setCursor(23, 8);
+    matrix->print(teamCScore);
+  }
 
 
   // Small colored squares (decorations)
